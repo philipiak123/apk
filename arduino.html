@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Kontrola diody na ESP32 przez Bluetooth</title>
+</head>
+<body>
+  <h1>Kontrola diody na ESP32 przez Bluetooth</h1>
+  <button id="connect">Połącz z urządzeniem</button>
+  <button id="disconnect" style="display: none;">Rozłącz</button>
+  <button id="toggleLED" style="display: none;">Włącz/Wyłącz Diody</button>
+  <p id="status">Nie połączono</p>
+  <p id="deviceName">Nazwa urządzenia: brak danych</p>
+
+  <script>
+    let connectedDevice = null;
+    let characteristic = null;
+    let isLEDOn = false;  // Stan diody
+
+    // Funkcja do wyszukiwania i połączenia z urządzeniem Bluetooth
+    function connectToDevice() {
+      navigator.bluetooth.requestDevice({
+        acceptAllDevices: true,  // Akceptuj wszystkie urządzenia
+        optionalServices: ['0000ffe0-0000-1000-8000-00805f9b34fb']  // UUID usługi czujnika danych
+      })
+      .then(device => {
+        console.log('Znaleziono urządzenie:', device.name);
+        document.getElementById('status').innerText = "Nawiązywanie połączenia...";
+        document.getElementById('deviceName').innerText = "Nazwa urządzenia: " + device.name;
+        connectedDevice = device;
+        return device.gatt.connect();
+      })
+      .then(server => {
+        console.log('Nawiązano połączenie GATT z urządzeniem.');
+        document.getElementById('status').innerText = "Połączono z urządzeniem";
+        document.getElementById('connect').style.display = 'none';
+        document.getElementById('disconnect').style.display = 'inline';
+        document.getElementById('toggleLED').style.display = 'inline';
+        return server.getPrimaryService('0000ffe0-0000-1000-8000-00805f9b34fb');  // UUID usługi
+      })
+      .then(service => {
+        console.log('Znaleziono usługę Bluetooth.');
+        return service.getCharacteristic('0000ffe1-0000-1000-8000-00805f9b34fb');  // UUID charakterystyki
+      })
+      .then(char => {
+        characteristic = char;
+      })
+      .catch(error => {
+        console.error('Błąd podczas nawiązywania połączenia Bluetooth:', error);
+        document.getElementById('status').innerText = "Błąd: " + error;
+      });
+    }
+
+    // Funkcja do rozłączania urządzenia Bluetooth
+    function disconnectDevice() {
+      if (connectedDevice && connectedDevice.gatt.connected) {
+        connectedDevice.gatt.disconnect();
+        console.log('Rozłączono z urządzeniem.');
+        document.getElementById('status').innerText = "Rozłączono z urządzeniem";
+        document.getElementById('connect').style.display = 'inline';
+        document.getElementById('disconnect').style.display = 'none';
+        document.getElementById('toggleLED').style.display = 'none';
+      }
+    }
+
+    // Funkcja do przełączania stanu diody
+    function toggleLED() {
+      if (characteristic) {
+        const command = isLEDOn ? [0x00] : [0x01];  // Komendy do włączenia i wyłączenia diody
+        characteristic.writeValue(new Uint8Array(command))
+          .then(() => {
+            console.log('Wysłano komendę do urządzenia.');
+            isLEDOn = !isLEDOn;
+            document.getElementById('toggleLED').innerText = isLEDOn ? 'Wyłącz Diody' : 'Włącz Diody';
+          })
+          .catch(error => {
+            console.error('Błąd podczas wysyłania komendy:', error);
+          });
+      }
+    }
+
+    // Nasłuchiwanie kliknięcia na przyciski
+    document.getElementById('connect').addEventListener('click', function() {
+      connectToDevice();
+    });
+
+    document.getElementById('disconnect').addEventListener('click', function() {
+      disconnectDevice();
+    });
+
+    document.getElementById('toggleLED').addEventListener('click', function() {
+      toggleLED();
+    });
+  </script>
+</body>
+</html>
